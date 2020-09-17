@@ -28,6 +28,7 @@ import { Deferred } from '../common/promise-util';
 import { environment } from '../common/index';
 import { AddressInfo } from 'net';
 import { ApplicationPackage } from '@theia/application-package';
+import { bootstrap } from 'global-agent';
 
 export const BackendApplicationContribution = Symbol('BackendApplicationContribution');
 export interface BackendApplicationContribution {
@@ -143,6 +144,7 @@ export class BackendApplication {
     }
 
     protected async initialize(): Promise<void> {
+        bootstrap();
         for (const contribution of this.contributionsProvider.getContributions()) {
             if (contribution.initialize) {
                 try {
