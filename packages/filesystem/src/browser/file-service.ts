@@ -1370,7 +1370,7 @@ export class FileService {
      */
     readonly onDidFilesChange = this.onDidFilesChangeEmitter.event;
 
-    private activeWatchers = new Map<string, { disposable: Disposable, count: number }>();
+    private activeWatchers = new Map<string, { disposable: Disposable, count: number, options: WatchOptions, uri: URI }>();
 
     watch(resource: URI, options: WatchOptions = { recursive: false, excludes: [] }): Disposable {
         const resolvedOptions: WatchOptions = {
@@ -1399,9 +1399,24 @@ export class FileService {
         const provider = await this.withProvider(resource);
         const key = this.toWatchKey(provider, resource, options);
 
-        // Only start watching if we are the first for the given key
-        const watcher = this.activeWatchers.get(key) || { count: 0, disposable: provider.watch(resource, options) };
-        if (!this.activeWatchers.has(key)) {
+        // Check if there is an already existing watcher that already covers this URI
+        let watcher = this.activeWatchers.get(key);
+        if (watcher === undefined) {
+            // Check if this URI is part of any other already active recursive watcher
+            for (const existingWatcher of this.activeWatchers.values()) {
+                if (existingWatcher.options.recursive) {
+                    const relative = existingWatcher.uri.relative(resource);
+                    if (relative !== undefined) {
+                        watcher = existingWatcher;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If no existing watchers already covered this URI, then create a new watcher
+        if (watcher === undefined) {
+            watcher = { count: 0, disposable: provider.watch(resource, options), options: options, uri: resource };
             this.activeWatchers.set(key, watcher);
         }
 
@@ -1411,11 +1426,11 @@ export class FileService {
         return Disposable.create(() => {
 
             // Unref
-            watcher.count--;
+            watcher!.count--;
 
             // Dispose only when last user is reached
-            if (watcher.count === 0) {
-                watcher.disposable.dispose();
+            if (watcher!.count === 0) {
+                watcher!.disposable.dispose();
                 this.activeWatchers.delete(key);
             }
         });
